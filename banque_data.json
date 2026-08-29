@@ -12,26 +12,26 @@
     "categories": [
         "Salaire",
         "Aide",
-        "Virement",
         "Abonnement",
         "Voiture",
         "Cigarettes",
         "Occasion",
         "Appartement",
         "Course",
-        "Interets"
+        "Interets",
+        "Virement"
     ],
     "category_colors": {
         "Salaire": "#22C55E",
         "Aide": "#10B981",
-        "Virement": "#3B82F6",
         "Abonnement": "#6366F1",
         "Voiture": "#8B5CF6",
         "Cigarettes": "#EC4899",
         "Occasion": "#F59E0B",
         "Appartement": "#EF4444",
         "Course": "#14B8A6",
-        "Interets": "#3B82F6"
+        "Interets": "#3B82F6",
+        "Virement": "#3B82F6"
     },
     "transactions": [
         {
