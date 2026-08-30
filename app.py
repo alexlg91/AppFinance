@@ -10,14 +10,13 @@ import streamlit.components.v1 as components
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Gestion Bancaire", layout="wide", page_icon="💰")
 
-# --- KEEPALIVE CÔTÉ CLIENT (Empêche les déconnexions intempestives) ---
-# Ce script tourne dans le navigateur et maintient la connexion WebSocket active
+# --- KEEPALIVE CÔTÉ CLIENT ---
 components.html(
     """
     <script>
     setInterval(function() {
         window.parent.postMessage('keepAlive', '*');
-    }, 30000); // Ping toutes les 30 secondes
+    }, 30000);
     </script>
     """,
     height=0,
@@ -28,22 +27,22 @@ components.html(
 st.markdown("""
 <style>
     .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 1.2rem !important;
+        padding-top: 0.8rem !important;
+        padding-bottom: 1rem !important;
     }
 
     h1 {
         color: #E53E3E !important;
         border-bottom: 2px solid #E53E3E;
         padding-bottom: 4px;
-        margin-bottom: 0.6rem !important;
-        font-size: 1.7rem !important;
+        margin-bottom: 0.4rem !important;
+        font-size: 1.6rem !important;
     }
 
     h2 {
         color: #FFFFFF !important;
-        font-size: 1.2rem !important;
-        margin-top: 0.3rem !important;
+        font-size: 1.15rem !important;
+        margin-top: 0.2rem !important;
         margin-bottom: 0.3rem !important;
     }
     h3 {
@@ -55,8 +54,8 @@ st.markdown("""
 
     button[data-baseweb="tab"] {
         font-weight: bold;
-        padding-top: 4px !important;
-        padding-bottom: 4px !important;
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
     }
     button[aria-selected="true"] {
         color: #E53E3E !important;
@@ -74,7 +73,7 @@ st.markdown("""
     }
 
     hr {
-        margin: 0.5rem 0 !important;
+        margin: 0.4rem 0 !important;
         border-color: #E5E7EB !important;
     }
 </style>
@@ -101,7 +100,6 @@ DEFAULT_CATEGORY_COLORS = {
 
 # --- FONCTIONS DE PERSISTANCE DES DONNÉES ---
 def charger_donnees():
-    """Charge les données depuis le fichier JSON s'il existe."""
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -140,7 +138,6 @@ def charger_donnees():
     )
 
 def sauvegarder_donnees():
-    """Sauvegarde les données dans le fichier JSON."""
     df_to_save = st.session_state['transactions'].copy()
     if not df_to_save.empty:
         df_to_save['Date'] = df_to_save['Date'].astype(str)
@@ -177,7 +174,7 @@ if 'initialized' not in st.session_state:
 if 'edit_trans_id' not in st.session_state:
     st.session_state['edit_trans_id'] = None
 
-# --- SYSTEME DE VERROUILLAGE (MOT DE PASSE) ---
+# --- SYSTEME DE VERROUILLAGE (OPTIMISÉ BITWARDEN) ---
 if st.session_state['password_enabled'] and not st.session_state['authenticated']:
     st.title("🔒 Accès Protégé")
     st.info("Cette application est protégée. Veuillez entrer le mot de passe pour accéder à vos comptes.")
@@ -185,6 +182,7 @@ if st.session_state['password_enabled'] and not st.session_state['authenticated'
     col_pwd1, col_pwd2, col_pwd3 = st.columns([1, 2, 1])
     with col_pwd2:
         with st.form("login_form"):
+            username_input = st.text_input("Identifiant", value="Admin")
             pwd_input = st.text_input("Mot de passe", type="password")
             submit_login = st.form_submit_button("Déverrouiller l'accès")
             
@@ -194,6 +192,28 @@ if st.session_state['password_enabled'] and not st.session_state['authenticated'
                     st.rerun()
                 else:
                     st.error("Mot de passe incorrect.")
+                    
+    components.html(
+        """
+        <script>
+        setTimeout(function() {
+            const doc = window.parent.document;
+            const inputs = doc.querySelectorAll('input');
+            inputs.forEach(input => {
+                if (input.type === 'password') {
+                    input.setAttribute('autocomplete', 'current-password');
+                    input.setAttribute('name', 'password');
+                } else if (input.type === 'text') {
+                    input.setAttribute('autocomplete', 'username');
+                    input.setAttribute('name', 'username');
+                }
+            });
+        }, 300);
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
     st.stop()
 
 # ==========================================
@@ -233,7 +253,6 @@ tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📝 Transactions", "⚙️ Param
 with tab1:
     st.header("Tableau de bord")
     
-    # 1. Barre de contrôle (Sélection d'année & de mois)
     col_dash1, col_dash2 = st.columns(2)
     annees_dispos = list(range(2020, datetime.datetime.now().year + 5))
     
@@ -253,7 +272,6 @@ with tab1:
             key="dash_mois"
         )
 
-    # 2. Solde actuel des comptes + TOTAL GLOBAL
     soldes_actuels = calculer_soldes_actuels()
     total_general = sum(soldes_actuels.values())
     
@@ -281,7 +299,6 @@ with tab1:
     if df.empty:
         st.info("Aucune transaction enregistrée. Rendez-vous dans l'onglet 'Transactions' pour commencer.")
     else:
-        # 3. ANALYSES PLACÉES AU-DESSUS (Mois à gauche, Année à droite)
         df_in_out = df[df['Type'].isin(['Entrée', 'Sortie'])]
         df_sorties = df[df['Type'] == 'Sortie']
 
@@ -306,6 +323,7 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
 
+            st.markdown("**Dépenses du mois**")
             df_mois_depenses = df_sorties[(df_sorties['Année'] == annee_dash) & (df_sorties['Mois'] == mois_dash)]
             if not df_mois_depenses.empty:
                 fig_pie_mois = px.pie(
@@ -317,15 +335,35 @@ with tab1:
                     hole=0.4
                 )
                 fig_pie_mois.update_traces(textinfo='percent+value')
-                # LÉGENDE SUR LE CÔTÉ (Verticale) ET HAUTEUR AUGMENTÉE
                 fig_pie_mois.update_layout(
-                    height=300, 
+                    height=280, 
                     margin=dict(l=0, r=0, t=10, b=10), 
                     legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.0)
                 )
                 st.plotly_chart(fig_pie_mois, use_container_width=True)
             else:
                 st.info(f"Aucune dépense en {mois_dict[mois_dash]} {annee_dash}.")
+
+            st.markdown("**Entrées du mois**")
+            df_mois_entrees = df[(df['Type'] == 'Entrée') & (df['Année'] == annee_dash) & (df['Mois'] == mois_dash)]
+            if not df_mois_entrees.empty:
+                fig_pie_mois_ent = px.pie(
+                    df_mois_entrees, 
+                    values='Montant', 
+                    names='Catégorie', 
+                    color='Catégorie',
+                    color_discrete_map=st.session_state['category_colors'],
+                    hole=0.4
+                )
+                fig_pie_mois_ent.update_traces(textinfo='percent+value')
+                fig_pie_mois_ent.update_layout(
+                    height=280, 
+                    margin=dict(l=0, r=0, t=10, b=10), 
+                    legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.0)
+                )
+                st.plotly_chart(fig_pie_mois_ent, use_container_width=True)
+            else:
+                st.info(f"Aucune entrée en {mois_dict[mois_dash]} {annee_dash}.")
 
         # --- BLOC ANNÉE ---
         with col_annee:
@@ -345,6 +383,7 @@ with tab1:
             </div>
             """, unsafe_allow_html=True)
 
+            st.markdown("**Dépenses de l'année**")
             df_an_depenses = df_sorties[df_sorties['Année'] == annee_dash]
             if not df_an_depenses.empty:
                 fig_pie_an = px.pie(
@@ -356,9 +395,8 @@ with tab1:
                     hole=0.4
                 )
                 fig_pie_an.update_traces(textinfo='percent+value')
-                # LÉGENDE SUR LE CÔTÉ (Verticale) ET HAUTEUR AUGMENTÉE
                 fig_pie_an.update_layout(
-                    height=300, 
+                    height=280, 
                     margin=dict(l=0, r=0, t=10, b=10), 
                     legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.0)
                 )
@@ -366,9 +404,30 @@ with tab1:
             else:
                 st.info(f"Aucune dépense en {annee_dash}.")
 
+            st.markdown("**Entrées de l'année**")
+            df_an_entrees = df[(df['Type'] == 'Entrée') & (df['Année'] == annee_dash)]
+            if not df_an_entrees.empty:
+                fig_pie_an_ent = px.pie(
+                    df_an_entrees, 
+                    values='Montant', 
+                    names='Catégorie', 
+                    color='Catégorie',
+                    color_discrete_map=st.session_state['category_colors'],
+                    hole=0.4
+                )
+                fig_pie_an_ent.update_traces(textinfo='percent+value')
+                fig_pie_an_ent.update_layout(
+                    height=280, 
+                    margin=dict(l=0, r=0, t=10, b=10), 
+                    legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.0)
+                )
+                st.plotly_chart(fig_pie_an_ent, use_container_width=True)
+            else:
+                st.info(f"Aucune entrée en {annee_dash}.")
+
         st.divider()
 
-        # 4. ÉVOLUTION DES SOLDES
+        # ÉVOLUTION DES SOLDES
         st.subheader(f"📈 Évolution des soldes en {annee_dash}")
         df_annee = df[df['Année'] == annee_dash].sort_values(by=['Mois', 'Jour'])
         
@@ -421,11 +480,11 @@ with tab1:
 
         st.divider()
 
-        # 5. Moyennes Mensuelles & Totaux
+        # Moyennes Mensuelles & Totaux
         col_moyenne_dep, col_moyenne_ent = st.columns(2)
         
         with col_moyenne_dep:
-            st.subheader(f"🔻 Moyenne et Total des dépenses ({annee_dash})")
+            st.subheader(f"🔻 Moyenne des dépenses ({annee_dash})")
             df_sorties_annee = df_sorties[df_sorties['Année'] == annee_dash]
             
             if not df_sorties_annee.empty:
@@ -437,21 +496,17 @@ with tab1:
                 df_moyenne_dep = df_total_dep.copy()
                 df_moyenne_dep['Moyenne (€/mois)'] = df_moyenne_dep['Total Annuel (€)'] / nb_mois_actifs
                 
+                st.markdown("**Moyenne mensuelle**")
                 fig_bar_dep = px.bar(df_moyenne_dep, y='Catégorie', x='Moyenne (€/mois)', color='Moyenne (€/mois)',
                                      orientation='h', color_continuous_scale='Reds', text_auto='.2f')
                 fig_bar_dep.update_layout(height=280, margin=dict(l=10, r=10, t=20, b=10), yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_bar_dep, use_container_width=True)
-                
-                fig_bar_tot_dep = px.bar(df_total_dep, y='Catégorie', x='Total Annuel (€)', color='Catégorie', 
-                                         orientation='h', color_discrete_map=st.session_state['category_colors'], text_auto='.2f')
-                fig_bar_tot_dep.update_layout(height=280, margin=dict(l=10, r=10, t=20, b=10), yaxis={'categoryorder':'total ascending'}, showlegend=False)
-                st.plotly_chart(fig_bar_tot_dep, use_container_width=True)
 
             else:
                 st.write(f"Aucune dépense enregistrée en {annee_dash}.")
 
         with col_moyenne_ent:
-            st.subheader(f"🍏 Moyenne et Total des entrées ({annee_dash})")
+            st.subheader(f"🍏 Moyenne des entrées ({annee_dash})")
             df_entrees_annee = df[(df['Type'] == 'Entrée') & (df['Année'] == annee_dash)]
             
             if not df_entrees_annee.empty:
@@ -463,34 +518,54 @@ with tab1:
                 df_moyenne_ent = df_total_ent.copy()
                 df_moyenne_ent['Moyenne (€/mois)'] = df_moyenne_ent['Total Annuel (€)'] / nb_mois_actifs_in
                 
+                st.markdown("**Moyenne mensuelle**")
                 fig_bar_ent = px.bar(df_moyenne_ent, y='Catégorie', x='Moyenne (€/mois)', color='Moyenne (€/mois)',
                                      orientation='h', color_continuous_scale='Greens', text_auto='.2f')
                 fig_bar_ent.update_layout(height=280, margin=dict(l=10, r=10, t=20, b=10), yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_bar_ent, use_container_width=True)
                 
-                fig_bar_tot_ent = px.bar(df_total_ent, y='Catégorie', x='Total Annuel (€)', color='Catégorie',
-                                         orientation='h', color_discrete_map=st.session_state['category_colors'], text_auto='.2f')
-                fig_bar_tot_ent.update_layout(height=280, margin=dict(l=10, r=10, t=20, b=10), yaxis={'categoryorder':'total ascending'}, showlegend=False)
-                st.plotly_chart(fig_bar_tot_ent, use_container_width=True)
             else:
                 st.write(f"Aucune entrée d'argent enregistrée en {annee_dash}.")
 
 # ==========================================
-# ONGLET 2 : TRANSACTIONS
+# ONGLET 2 : TRANSACTIONS (SÉPARATION PAR MOIS RETROUVÉE)
 # ==========================================
 with tab2:
-    st.header("Mes Transactions")
+    st.markdown("<h2 style='margin-top: -15px; margin-bottom: 8px;'>📝 Mes Transactions</h2>", unsafe_allow_html=True)
     
+    soldes_actuels_t2 = calculer_soldes_actuels()
+    total_general_t2 = sum(soldes_actuels_t2.values())
+    
+    cols_t2 = st.columns(len(soldes_actuels_t2) + 1 if len(soldes_actuels_t2) > 0 else 1)
+    
+    color_tot_t2 = "#22C55E" if total_general_t2 >= 0 else "#EF4444"
+    cols_t2[0].markdown(f"""
+    <div style="background-color: #FFFFFF; border: 1px solid #E5E7EB; border-left: 4px solid {color_tot_t2}; border-radius: 6px; padding: 4px 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+        <div style="color: #000000; font-weight: 600; font-size: 0.75rem;">🌐 TOTAL GÉNÉRAL</div>
+        <div style="color: {color_tot_t2}; font-size: 1.1rem; font-weight: bold;">{total_general_t2:.2f} €</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    for i, (compte, solde) in enumerate(soldes_actuels_t2.items(), start=1):
+        color_cpt = "#22C55E" if solde >= 0 else "#EF4444"
+        cols_t2[i].markdown(f"""
+        <div style="background-color: #FFFFFF; border: 1px solid #E5E7EB; border-left: 4px solid {color_cpt}; border-radius: 6px; padding: 4px 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+            <div style="color: #000000; font-weight: 600; font-size: 0.75rem;">{compte}</div>
+            <div style="color: {color_cpt}; font-size: 1.1rem; font-weight: bold;">{solde:.2f} €</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<div style='margin-bottom: 8px;'></div>", unsafe_allow_html=True)
+
     annees_dispos = list(range(2020, datetime.datetime.now().year + 5))
-    annee_choisie = st.selectbox("Sélectionnez l'année", annees_dispos, index=annees_dispos.index(datetime.datetime.now().year))
     
-    # --- FORMULAIRE 1 : ENTRÉE / SORTIE ---
     with st.expander("➕ Enregistrer une Entrée ou Sortie d'argent", expanded=False):
         with st.form("ajout_transaction_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             
             with col1:
                 type_trans = st.radio("Type de transaction", ["Entrée", "Sortie"], index=1)
+                annee_saisie = st.selectbox("Année de la transaction", annees_dispos, index=annees_dispos.index(datetime.datetime.now().year))
                 mois_choisi_num = st.selectbox("Mois", list(mois_dict.keys()), format_func=lambda x: mois_dict[x], index=datetime.datetime.now().month - 1)
                 jour = st.number_input("Jour du mois", min_value=1, max_value=31, value=datetime.datetime.now().day)
                 
@@ -504,7 +579,7 @@ with tab2:
             
             if submit_btn:
                 try:
-                    date_val = datetime.date(annee_choisie, mois_choisi_num, int(jour))
+                    date_val = datetime.date(annee_saisie, mois_choisi_num, int(jour))
                     nouveau_id = 1 if st.session_state['transactions'].empty else int(st.session_state['transactions']['ID'].max()) + 1
                     
                     nouvelle_ligne = {
@@ -512,7 +587,7 @@ with tab2:
                         'Date': date_val,
                         'Jour': int(jour),
                         'Mois': mois_choisi_num,
-                        'Année': annee_choisie,
+                        'Année': annee_saisie,
                         'Type': type_trans,
                         'Compte': compte,
                         'Compte Cible': None,
@@ -528,7 +603,6 @@ with tab2:
                 except ValueError:
                     st.error("Date invalide (ex: 31 Février).")
 
-    # --- FORMULAIRE 2 : TRANSFERT ---
     with st.expander("🔄 Enregistrer un Transfert entre comptes", expanded=False):
         with st.form("ajout_transfert_form", clear_on_submit=True):
             st.markdown("**(Mouvement d'argent entre deux de vos comptes internes)**")
@@ -536,6 +610,7 @@ with tab2:
             
             with col1:
                 st.write("**Type :** Transfert")
+                annee_saisie_t = st.selectbox("Année de la transaction", annees_dispos, index=annees_dispos.index(datetime.datetime.now().year), key="annee_t")
                 mois_choisi_num_t = st.selectbox("Mois ", list(mois_dict.keys()), format_func=lambda x: mois_dict[x], index=datetime.datetime.now().month - 1, key="mois_t")
                 jour_t = st.number_input("Jour du mois ", min_value=1, max_value=31, value=datetime.datetime.now().day, key="jour_t")
                 
@@ -553,7 +628,7 @@ with tab2:
                     st.error("Le compte de départ et d'arrivée ne peuvent pas être les mêmes.")
                 else:
                     try:
-                        date_val_t = datetime.date(annee_choisie, mois_choisi_num_t, int(jour_t))
+                        date_val_t = datetime.date(annee_saisie_t, mois_choisi_num_t, int(jour_t))
                         nouveau_id_t = 1 if st.session_state['transactions'].empty else int(st.session_state['transactions']['ID'].max()) + 1
                         
                         nouvelle_ligne_t = {
@@ -561,7 +636,7 @@ with tab2:
                             'Date': date_val_t,
                             'Jour': int(jour_t),
                             'Mois': mois_choisi_num_t,
-                            'Année': annee_choisie,
+                            'Année': annee_saisie_t,
                             'Type': "Transfert",
                             'Compte': compte_source,
                             'Compte Cible': compte_cible,
@@ -578,107 +653,174 @@ with tab2:
                         st.error("Date invalide.")
 
     st.divider()
+
+    st.markdown("### 🔍 Recherche & Filtres")
+    f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns([1.2, 1.8, 1.5, 1.5, 1.2, 2.0])
     
-    # Affichage des transactions par mois
-    df_annee_affichage = st.session_state['transactions'][
-        st.session_state['transactions']['Année'] == annee_choisie
-    ].sort_values(by=['Mois', 'Jour', 'ID'], ascending=[False, False, False])
-    
-    if df_annee_affichage.empty:
-        st.info(f"Aucune transaction pour l'année {annee_choisie}.")
+    with f_col1:
+        annee_filtre = st.selectbox("Année", ["Toutes"] + annees_dispos, index=annees_dispos.index(datetime.datetime.now().year) + 1, key="f_annee")
+        
+    with f_col2:
+        search_query = st.text_input("Recherche (Nom)", "", placeholder="Ex: Course, Netflix...", key="f_query")
+        
+    with f_col3:
+        cat_filtre = st.selectbox("Catégorie", ["Toutes"] + st.session_state['categories'] + ["Virement interne"], key="f_cat")
+        
+    with f_col4:
+        compte_filtre = st.selectbox("Compte", ["Tous"] + st.session_state['comptes'], key="f_compte")
+        
+    with f_col5:
+        type_filtre = st.selectbox("Type", ["Tous", "Entrée", "Sortie", "Transfert"], key="f_type")
+        
+    with f_col6:
+        tri_filtre = st.selectbox(
+            "Tri d'affichage",
+            ["Date (Décroissant)", "Date (Croissant)", "Montant (Croissant)", "Montant (Décroissant)", "Par Catégorie"],
+            key="f_tri"
+        )
+
+    df_filtered = st.session_state['transactions'].copy()
+
+    if annee_filtre != "Toutes":
+        df_filtered = df_filtered[df_filtered['Année'] == int(annee_filtre)]
+
+    if search_query.strip():
+        df_filtered = df_filtered[df_filtered['Nom'].str.contains(search_query.strip(), case=False, na=False)]
+
+    if cat_filtre != "Toutes":
+        df_filtered = df_filtered[df_filtered['Catégorie'] == cat_filtre]
+
+    if compte_filtre != "Tous":
+        df_filtered = df_filtered[(df_filtered['Compte'] == compte_filtre) | (df_filtered['Compte Cible'] == compte_filtre)]
+
+    if type_filtre != "Tous":
+        df_filtered = df_filtered[df_filtered['Type'] == type_filtre]
+
+    if tri_filtre == "Date (Décroissant)":
+        df_filtered = df_filtered.sort_values(by=['Année', 'Mois', 'Jour', 'ID'], ascending=[False, False, False, False])
+    elif tri_filtre == "Date (Croissant)":
+        df_filtered = df_filtered.sort_values(by=['Année', 'Mois', 'Jour', 'ID'], ascending=[True, True, True, True])
+    elif tri_filtre == "Montant (Croissant)":
+        df_filtered = df_filtered.sort_values(by=['Montant', 'ID'], ascending=[True, True])
+    elif tri_filtre == "Montant (Décroissant)":
+        df_filtered = df_filtered.sort_values(by=['Montant', 'ID'], ascending=[False, False])
+    elif tri_filtre == "Par Catégorie":
+        df_filtered = df_filtered.sort_values(by=['Catégorie', 'Montant'], ascending=[True, False])
+
+    tot_entrees = df_filtered[df_filtered['Type'] == 'Entrée']['Montant'].sum()
+    tot_sorties = df_filtered[df_filtered['Type'] == 'Sortie']['Montant'].sum()
+    diff_net = tot_entrees - tot_sorties
+    color_net = "#22C55E" if diff_net >= 0 else "#EF4444"
+
+    st.markdown(f"""
+    <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 8px 14px; margin-top: 6px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+        <div>
+            <span style="font-weight: bold; color: #1E293B;">📊 Résumé de la sélection :</span> &nbsp;
+            <span style="color: #22C55E; font-weight: 600;">➕ Entrées : {tot_entrees:.2f} €</span> &nbsp;|&nbsp;
+            <span style="color: #EF4444; font-weight: 600;">➖ Dépenses : {tot_sorties:.2f} €</span> &nbsp;|&nbsp;
+            <span style="color: {color_net}; font-weight: bold;">⚖️ Net : {diff_net:+.2f} €</span>
+        </div>
+        <div style="color: #64748B; font-size: 0.85rem; font-weight: 500;">
+            <b>{len(df_filtered)}</b> transaction(s) trouvée(s)
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if df_filtered.empty:
+        st.info("Aucune transaction ne correspond aux critères de recherche actuels.")
     else:
-        mois_presents = df_annee_affichage['Mois'].unique()
-        for m in sorted(mois_presents, reverse=True):
-            st.markdown(f"""
-            <div style="background: linear-gradient(90deg, #E53E3E 0%, #F87171 100%); padding: 12px 20px; border-radius: 8px; margin-top: 30px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-                <h3 style="margin: 0; color: white !important; font-size: 1.4rem; text-align: left; font-weight: bold;">📅 {mois_dict[m]} {annee_choisie}</h3>
-            </div>
-            """, unsafe_allow_html=True)
-
-            df_mois = df_annee_affichage[df_annee_affichage['Mois'] == m]
+        # Groupe les transactions par mois et année pour afficher les séparations
+        current_month_key = None
+        
+        for idx, row in df_filtered.iterrows():
+            month_key = (row['Année'], row['Mois'])
             
-            h_col1, h_col2, h_col3, h_col4, h_col5, h_col6, h_col7 = st.columns([1.2, 1.2, 2.5, 2, 2.5, 1.5, 1.0])
-            h_col1.markdown("**Date**")
-            h_col2.markdown("**Type**")
-            h_col3.markdown("**Compte(s)**")
-            h_col4.markdown("**Catégorie**")
-            h_col5.markdown("**Nom**")
-            h_col6.markdown("**Montant**")
-            h_col7.markdown("**Action**")
-            st.markdown("<hr style='margin: 0.2rem 0; border-color: #E5E7EB;'>", unsafe_allow_html=True)
-            
-            for idx, row in df_mois.iterrows():
-                if st.session_state.get('edit_trans_id') == row['ID']:
-                    with st.form(key=f"edit_form_{row['ID']}"):
-                        st.markdown("**Modifier la transaction**")
-                        ec1, ec2, ec3 = st.columns(3)
-                        new_date = ec1.date_input("Date", value=row['Date'])
-                        new_type = ec2.selectbox("Type", ["Entrée", "Sortie", "Transfert"], index=["Entrée", "Sortie", "Transfert"].index(row['Type']))
-                        new_montant = ec3.number_input("Montant (€)", value=float(row['Montant']), min_value=0.01)
+            # Affichage de l'en-tête de mois à chaque changement de mois/année
+            if month_key != current_month_key:
+                current_month_key = month_key
+                st.markdown(f"<h3 style='margin-top: 20px; margin-bottom: 6px; color: #E53E3E; border-bottom: 1px solid #E53E3E; padding-bottom: 2px;'>📅 {mois_dict[row['Mois']]} {row['Année']}</h3>", unsafe_allow_html=True)
+                
+                h_col1, h_col2, h_col3, h_col4, h_col5, h_col6, h_col7 = st.columns([1.2, 1.2, 2.5, 2, 2.5, 1.5, 1.0])
+                h_col1.markdown("**Date**")
+                h_col2.markdown("**Type**")
+                h_col3.markdown("**Compte(s)**")
+                h_col4.markdown("**Catégorie**")
+                h_col5.markdown("**Nom**")
+                h_col6.markdown("**Montant**")
+                h_col7.markdown("**Action**")
+                st.markdown("<hr style='margin: 0.2rem 0; border-color: #E5E7EB;'>", unsafe_allow_html=True)
 
-                        ec4, ec5, ec6 = st.columns(3)
-                        new_compte = ec4.selectbox("Compte", st.session_state['comptes'], index=st.session_state['comptes'].index(row['Compte']) if row['Compte'] in st.session_state['comptes'] else 0)
-                        
-                        if new_type == "Transfert":
-                            default_cible = st.session_state['comptes'].index(row['Compte Cible']) if row['Compte Cible'] in st.session_state['comptes'] else 0
-                            new_compte_cible = ec5.selectbox("Compte d'arrivée", st.session_state['comptes'], index=default_cible)
-                            new_cat = "Virement interne"
-                        else:
-                            new_compte_cible = None
-                            new_cat = ec5.selectbox("Catégorie", st.session_state['categories'], index=st.session_state['categories'].index(row['Catégorie']) if row['Catégorie'] in st.session_state['categories'] else 0)
-                        
-                        new_nom = ec6.text_input("Nom", value=row['Nom'])
+            if st.session_state.get('edit_trans_id') == row['ID']:
+                with st.form(key=f"edit_form_{row['ID']}"):
+                    st.markdown("**Modifier la transaction**")
+                    ec1, ec2, ec3 = st.columns(3)
+                    new_date = ec1.date_input("Date", value=row['Date'])
+                    new_type = ec2.selectbox("Type", ["Entrée", "Sortie", "Transfert"], index=["Entrée", "Sortie", "Transfert"].index(row['Type']))
+                    new_montant = ec3.number_input("Montant (€)", value=float(row['Montant']), min_value=0.01)
 
-                        col_b1, col_b2 = st.columns(2)
-                        if col_b1.form_submit_button("✅ Enregistrer"):
-                            idx_to_update = st.session_state['transactions'].index[st.session_state['transactions']['ID'] == row['ID']].tolist()[0]
-                            st.session_state['transactions'].at[idx_to_update, 'Date'] = new_date
-                            st.session_state['transactions'].at[idx_to_update, 'Jour'] = new_date.day
-                            st.session_state['transactions'].at[idx_to_update, 'Mois'] = new_date.month
-                            st.session_state['transactions'].at[idx_to_update, 'Année'] = new_date.year
-                            st.session_state['transactions'].at[idx_to_update, 'Type'] = new_type
-                            st.session_state['transactions'].at[idx_to_update, 'Compte'] = new_compte
-                            st.session_state['transactions'].at[idx_to_update, 'Compte Cible'] = new_compte_cible
-                            st.session_state['transactions'].at[idx_to_update, 'Catégorie'] = new_cat
-                            st.session_state['transactions'].at[idx_to_update, 'Nom'] = new_nom
-                            st.session_state['transactions'].at[idx_to_update, 'Montant'] = new_montant
-                            st.session_state['edit_trans_id'] = None
-                            sauvegarder_donnees()
-                            st.rerun()
-                        if col_b2.form_submit_button("❌ Annuler"):
-                            st.session_state['edit_trans_id'] = None
-                            st.rerun()
-                else:
-                    c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([1.2, 1.2, 2.5, 2, 2.5, 1.5, 0.5, 0.5])
-                    c1.write(f"{row['Jour']:02d}/{row['Mois']:02d}/{row['Année']}")
+                    ec4, ec5, ec6 = st.columns(3)
+                    new_compte = ec4.selectbox("Compte", st.session_state['comptes'], index=st.session_state['comptes'].index(row['Compte']) if row['Compte'] in st.session_state['comptes'] else 0)
                     
-                    color_type = "#EF4444" if row['Type'] == 'Sortie' else ("#22C55E" if row['Type'] == 'Entrée' else "#3B82F6")
-                    c2.markdown(f"<span style='color:{color_type}; font-weight:bold;'>{row['Type']}</span>", unsafe_allow_html=True)
-                    
-                    if row['Type'] == 'Transfert':
-                        c3.write(f"De: **{row['Compte']}** ➔ Vers: **{row['Compte Cible']}**")
+                    if new_type == "Transfert":
+                        default_cible = st.session_state['comptes'].index(row['Compte Cible']) if row['Compte Cible'] in st.session_state['comptes'] else 0
+                        new_compte_cible = ec5.selectbox("Compte d'arrivée", st.session_state['comptes'], index=default_cible)
+                        new_cat = "Virement interne"
                     else:
-                        c3.write(f"{row['Compte']}")
-                        
-                    cat_color = st.session_state['category_colors'].get(row['Catégorie'], "#FFFFFF")
-                    c4.markdown(f"<span style='color:{cat_color}; font-weight:bold;'>{row['Catégorie']}</span>", unsafe_allow_html=True)
+                        new_compte_cible = None
+                        new_cat = ec5.selectbox("Catégorie", st.session_state['categories'], index=st.session_state['categories'].index(row['Catégorie']) if row['Catégorie'] in st.session_state['categories'] else 0)
                     
-                    c5.write(row['Nom'])
-                    
-                    prefix_signe = "-" if row['Type'] == 'Sortie' else ("+" if row['Type'] == 'Entrée' else "")
-                    c6.markdown(f"<span style='color:{color_type}; font-weight:bold;'>{prefix_signe}{row['Montant']:.2f} €</span>", unsafe_allow_html=True)
-                    
-                    if c7.button("✏️", key=f"edit_{row['ID']}", help="Modifier cette transaction"):
-                        st.session_state['edit_trans_id'] = row['ID']
-                        st.rerun()
-                    
-                    if c8.button("🗑️", key=f"del_{row['ID']}", help="Supprimer cette transaction"):
-                        st.session_state['transactions'] = st.session_state['transactions'][
-                            st.session_state['transactions']['ID'] != row['ID']
-                        ]
+                    new_nom = ec6.text_input("Nom", value=row['Nom'])
+
+                    col_b1, col_b2 = st.columns(2)
+                    if col_b1.form_submit_button("✅ Enregistrer"):
+                        idx_to_update = st.session_state['transactions'].index[st.session_state['transactions']['ID'] == row['ID']].tolist()[0]
+                        st.session_state['transactions'].at[idx_to_update, 'Date'] = new_date
+                        st.session_state['transactions'].at[idx_to_update, 'Jour'] = new_date.day
+                        st.session_state['transactions'].at[idx_to_update, 'Mois'] = new_date.month
+                        st.session_state['transactions'].at[idx_to_update, 'Année'] = new_date.year
+                        st.session_state['transactions'].at[idx_to_update, 'Type'] = new_type
+                        st.session_state['transactions'].at[idx_to_update, 'Compte'] = new_compte
+                        st.session_state['transactions'].at[idx_to_update, 'Compte Cible'] = new_compte_cible
+                        st.session_state['transactions'].at[idx_to_update, 'Catégorie'] = new_cat
+                        st.session_state['transactions'].at[idx_to_update, 'Nom'] = new_nom
+                        st.session_state['transactions'].at[idx_to_update, 'Montant'] = new_montant
+                        st.session_state['edit_trans_id'] = None
                         sauvegarder_donnees()
-                        st.toast("Transaction supprimée !")
                         st.rerun()
+                    if col_b2.form_submit_button("❌ Annuler"):
+                        st.session_state['edit_trans_id'] = None
+                        st.rerun()
+            else:
+                c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([1.2, 1.2, 2.5, 2, 2.5, 1.5, 0.5, 0.5])
+                c1.write(f"{row['Jour']:02d}/{row['Mois']:02d}/{row['Année']}")
+                
+                color_type = "#EF4444" if row['Type'] == 'Sortie' else ("#22C55E" if row['Type'] == 'Entrée' else "#3B82F6")
+                c2.markdown(f"<span style='color:{color_type}; font-weight:bold;'>{row['Type']}</span>", unsafe_allow_html=True)
+                
+                if row['Type'] == 'Transfert':
+                    c3.write(f"De: **{row['Compte']}** ➔ Vers: **{row['Compte Cible']}**")
+                else:
+                    c3.write(f"{row['Compte']}")
+                    
+                cat_color = st.session_state['category_colors'].get(row['Catégorie'], "#FFFFFF")
+                c4.markdown(f"<span style='color:{cat_color}; font-weight:bold;'>{row['Catégorie']}</span>", unsafe_allow_html=True)
+                
+                c5.write(row['Nom'])
+                
+                prefix_signe = "-" if row['Type'] == 'Sortie' else ("+" if row['Type'] == 'Entrée' else "")
+                c6.markdown(f"<span style='color:{color_type}; font-weight:bold;'>{prefix_signe}{row['Montant']:.2f} €</span>", unsafe_allow_html=True)
+                
+                if c7.button("✏️", key=f"edit_{row['ID']}", help="Modifier cette transaction"):
+                    st.session_state['edit_trans_id'] = row['ID']
+                    st.rerun()
+                
+                if c8.button("🗑️", key=f"del_{row['ID']}", help="Supprimer cette transaction"):
+                    st.session_state['transactions'] = st.session_state['transactions'][
+                        st.session_state['transactions']['ID'] != row['ID']
+                    ]
+                    sauvegarder_donnees()
+                    st.toast("Transaction supprimée !")
+                    st.rerun()
 
 # ==========================================
 # ONGLET 3 : PARAMÈTRES
