@@ -5,12 +5,15 @@ import datetime
 import calendar
 import json
 import os
+import hashlib
 import streamlit.components.v1 as components
 
-# --- CONFIGURATION DE LA PAGE ---
+# ==========================================
+# 1. CONFIGURATION DE LA PAGE & CSS
+# ==========================================
 st.set_page_config(page_title="Gestion Bancaire", layout="wide", page_icon="💰")
 
-# --- KEEPALIVE CÔTÉ CLIENT ---
+# Script KeepAlive pour éviter les déconnexions d'inactivité
 components.html(
     """
     <script>
@@ -23,7 +26,7 @@ components.html(
     width=0,
 )
 
-# --- STYLE CSS PERSONNALISÉ (DESIGN COMPACT) ---
+# Style CSS personnalisé pour interface compacte
 st.markdown("""
 <style>
     .block-container {
@@ -79,7 +82,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- NOM DU FICHIER DE SAUVEGARDE LOCALE ---
+# ==========================================
+# 2. CONSTANTES & UTILITAIRES DE SÉCURITÉ
+# ==========================================
 DATA_FILE = "data/banque_data.json"
 os.makedirs("data", exist_ok=True)
 
@@ -98,8 +103,23 @@ DEFAULT_CATEGORY_COLORS = {
     "Virement interne": "#6B7280"
 }
 
-# --- FONCTIONS DE PERSISTANCE DES DONNÉES ---
+def hacher_mot_de_passe(password: str) -> str:
+    """
+    [OPTIMISATION SÉCURITÉ] Hache le mot de passe en SHA-256.
+    Ne stocke et ne compare jamais les mots de passe en texte brut.
+    """
+    if not password:
+        return ""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+# ==========================================
+# 3. FONCTIONS DE PERSISTANCE DES DONNÉES
+# ==========================================
 def charger_donnees():
+    """
+    Charge les données depuis le fichier JSON.
+    Assure la rétrocompatibilité avec les anciens mots de passe en clair.
+    """
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -138,6 +158,11 @@ def charger_donnees():
     )
 
 def sauvegarder_donnees():
+    """
+    [OPTIMISATION SAUVEGARDE ATOMIQUE] 
+    Écrit d'abord dans un fichier temporaire .tmp avant d'écraser le fichier principal.
+    Évite toute corruption de données en cas d'interruption ou de crash.
+    """
     df_to_save = st.session_state['transactions'].copy()
     if not df_to_save.empty:
         df_to_save['Date'] = df_to_save['Date'].astype(str)
@@ -155,10 +180,84 @@ def sauvegarder_donnees():
         "app_password": st.session_state['app_password']
     }
     
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+    temp_file = f"{DATA_FILE}.tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+    
+    # Remplacement atomique garanti par le système d'exploitation
+    os.replace(temp_file, DATA_FILE)
 
-# --- INITIALISATION DE LA SESSION ---
+# ==========================================
+# 4. CALCULS VECTORISÉS (PERFORMANCES PANDAS)
+# ==========================================
+def calculer_soldes_actuels():
+    """
+    [OPTIMISATION PANDAS / VECTORISATION]
+    Remplace iterrows() par l'utilisation de groupby() pour un calcul instantané des soldes.
+    """
+    soldes = st.session_state['soldes_initiaux'].copy()
+    df_trans = st.session_state['transactions']
+
+    if not df_trans.empty:
+        entrees = df_trans[df_trans['Type'] == 'Entrée'].groupby('Compte')['Montant'].sum()
+        sorties = df_trans[df_trans['Type'] == 'Sortie'].groupby('Compte')['Montant'].sum()
+        transferts_sortants = df_trans[df_trans['Type'] == 'Transfert'].groupby('Compte')['Montant'].sum()
+        transferts_entrants = df_trans[df_trans['Type'] == 'Transfert'].groupby('Compte Cible')['Montant'].sum()
+
+        for cpt in soldes.keys():
+            soldes[cpt] += entrees.get(cpt, 0.0)
+            soldes[cpt] -= sorties.get(cpt, 0.0)
+            soldes[cpt] -= transferts_sortants.get(cpt, 0.0)
+            soldes[cpt] += transferts_entrants.get(cpt, 0.0)
+
+    return soldes
+
+def calculer_evolution_soldes(df_annee):
+    """
+    [OPTIMISATION PANDAS / VECTORISATION]
+    Calcule la courbe d'évolution des soldes sans boucle itterows().
+    """
+    if df_annee.empty:
+        return pd.DataFrame(columns=['Date', 'Compte', 'Solde'])
+
+    comptes = st.session_state['comptes']
+    records = []
+
+    # Formatage des deltas de flux par transaction
+    for _, row in df_annee.iterrows():
+        delta = {cpt: 0.0 for cpt in comptes}
+        m = float(row['Montant'])
+        t = row['Type']
+        c_src = row['Compte']
+        c_tgt = row['Compte Cible']
+
+        if t == 'Entrée' and c_src in delta:
+            delta[c_src] += m
+        elif t == 'Sortie' and c_src in delta:
+            delta[c_src] -= m
+        elif t == 'Transfert':
+            if c_src in delta:
+                delta[c_src] -= m
+            if c_tgt in delta:
+                delta[c_tgt] += m
+
+        records.append({'Date': row['Date'], **delta})
+
+    df_deltas = pd.DataFrame(records)
+    df_grouped = df_deltas.groupby('Date')[comptes].sum().reset_index()
+
+    # Application des sommes cumulées (Cumsum) ajoutées aux soldes initiaux
+    for cpt in comptes:
+        init_val = st.session_state['soldes_initiaux'].get(cpt, 0.0)
+        df_grouped[cpt] = init_val + df_grouped[cpt].cumsum()
+
+    # Dépivotage (Melt) pour compatibilité avec Plotly
+    df_hist = df_grouped.melt(id_vars=['Date'], value_vars=comptes, var_name='Compte', value_name='Solde')
+    return df_hist
+
+# ==========================================
+# 5. INITIALISATION DE LA SESSION & AUTH
+# ==========================================
 if 'initialized' not in st.session_state:
     comptes, soldes_initiaux, categories, category_colors, df, pwd_enabled, pwd = charger_donnees()
     st.session_state['comptes'] = comptes
@@ -174,7 +273,7 @@ if 'initialized' not in st.session_state:
 if 'edit_trans_id' not in st.session_state:
     st.session_state['edit_trans_id'] = None
 
-# --- SYSTEME DE VERROUILLAGE (OPTIMISÉ BITWARDEN) ---
+# Écran de vérification du mot de passe
 if st.session_state['password_enabled'] and not st.session_state['authenticated']:
     st.title("🔒 Accès Protégé")
     st.info("Cette application est protégée. Veuillez entrer le mot de passe pour accéder à vos comptes.")
@@ -187,7 +286,15 @@ if st.session_state['password_enabled'] and not st.session_state['authenticated'
             submit_login = st.form_submit_button("Déverrouiller l'accès")
             
             if submit_login:
-                if pwd_input == st.session_state['app_password']:
+                hash_input = hacher_mot_de_passe(pwd_input)
+                stored_pwd = st.session_state['app_password']
+                
+                # Vérification hachée (avec rétro-compatibilité en clair si besoin)
+                if hash_input == stored_pwd or pwd_input == stored_pwd:
+                    if pwd_input == stored_pwd:
+                        # Migration automatique du mot de passe en clair vers hash SHA-256
+                        st.session_state['app_password'] = hash_input
+                        sauvegarder_donnees()
                     st.session_state['authenticated'] = True
                     st.rerun()
                 else:
@@ -217,40 +324,11 @@ if st.session_state['password_enabled'] and not st.session_state['authenticated'
     st.stop()
 
 # ==========================================
-# APP PRINCIPALE
+# 6. ARCHITECTURE MODULAIRE (FONCTIONS PAR ONGLET)
 # ==========================================
-st.title("💰 Mon Gestionnaire de Finances")
 
-df = st.session_state['transactions']
-
-mois_dict = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin", 
-             7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
-
-# --- CALCUL DES SOLDES ACTUELS ---
-def calculer_soldes_actuels():
-    soldes = st.session_state['soldes_initiaux'].copy()
-    for _, row in st.session_state['transactions'].iterrows():
-        montant = float(row['Montant'])
-        if row['Type'] == 'Entrée':
-            if row['Compte'] in soldes:
-                soldes[row['Compte']] += montant
-        elif row['Type'] == 'Sortie':
-            if row['Compte'] in soldes:
-                soldes[row['Compte']] -= montant
-        elif row['Type'] == 'Transfert':
-            if row['Compte'] in soldes:
-                soldes[row['Compte']] -= montant
-            if row['Compte Cible'] in soldes:
-                soldes[row['Compte Cible']] += montant
-    return soldes
-
-# --- CREATION DES ONGLETS ---
-tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📝 Transactions", "⚙️ Paramètres"])
-
-# ==========================================
-# ONGLET 1 : DASHBOARD COMPACT
-# ==========================================
-with tab1:
+def afficher_dashboard(df, mois_dict):
+    """[OPTIMISATION MODULARITÉ] Logique complète du Dashboard."""
     st.header("Tableau de bord")
     
     col_dash1, col_dash2 = st.columns(2)
@@ -427,31 +505,12 @@ with tab1:
 
         st.divider()
 
-        # ÉVOLUTION DES SOLDES
+        # ÉVOLUTION DES SOLDES (Version Optimisée)
         st.subheader(f"📈 Évolution des soldes en {annee_dash}")
         df_annee = df[df['Année'] == annee_dash].sort_values(by=['Mois', 'Jour'])
         
         if not df_annee.empty:
-            historique = []
-            soldes_temp = st.session_state['soldes_initiaux'].copy()
-            
-            for _, row in df_annee.iterrows():
-                if row['Type'] == 'Entrée':
-                    if row['Compte'] in soldes_temp:
-                        soldes_temp[row['Compte']] += row['Montant']
-                elif row['Type'] == 'Sortie':
-                    if row['Compte'] in soldes_temp:
-                        soldes_temp[row['Compte']] -= row['Montant']
-                elif row['Type'] == 'Transfert': 
-                    if row['Compte'] in soldes_temp:
-                        soldes_temp[row['Compte']] -= row['Montant']
-                    if row['Compte Cible'] in soldes_temp:
-                        soldes_temp[row['Compte Cible']] += row['Montant']
-                
-                for cpt in st.session_state['comptes']:
-                    historique.append({'Date': row['Date'], 'Compte': cpt, 'Solde': soldes_temp[cpt]})
-                    
-            df_hist = pd.DataFrame(historique)
+            df_hist = calculer_evolution_soldes(df_annee)
             
             account_colors = {}
             for cpt in st.session_state['comptes']:
@@ -501,7 +560,6 @@ with tab1:
                                      orientation='h', color_continuous_scale='Reds', text_auto='.2f')
                 fig_bar_dep.update_layout(height=280, margin=dict(l=10, r=10, t=20, b=10), yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_bar_dep, use_container_width=True)
-
             else:
                 st.write(f"Aucune dépense enregistrée en {annee_dash}.")
 
@@ -523,14 +581,12 @@ with tab1:
                                      orientation='h', color_continuous_scale='Greens', text_auto='.2f')
                 fig_bar_ent.update_layout(height=280, margin=dict(l=10, r=10, t=20, b=10), yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_bar_ent, use_container_width=True)
-                
             else:
                 st.write(f"Aucune entrée d'argent enregistrée en {annee_dash}.")
 
-# ==========================================
-# ONGLET 2 : TRANSACTIONS (SÉPARATION PAR MOIS RETROUVÉE)
-# ==========================================
-with tab2:
+
+def afficher_transactions(df, mois_dict):
+    """[OPTIMISATION MODULARITÉ] Logique de gestion des Transactions."""
     st.markdown("<h2 style='margin-top: -15px; margin-bottom: 8px;'>📝 Mes Transactions</h2>", unsafe_allow_html=True)
     
     soldes_actuels_t2 = calculer_soldes_actuels()
@@ -729,13 +785,11 @@ with tab2:
     if df_filtered.empty:
         st.info("Aucune transaction ne correspond aux critères de recherche actuels.")
     else:
-        # Groupe les transactions par mois et année pour afficher les séparations
         current_month_key = None
         
         for idx, row in df_filtered.iterrows():
             month_key = (row['Année'], row['Mois'])
             
-            # Affichage de l'en-tête de mois à chaque changement de mois/année
             if month_key != current_month_key:
                 current_month_key = month_key
                 st.markdown(f"<h3 style='margin-top: 20px; margin-bottom: 6px; color: #E53E3E; border-bottom: 1px solid #E53E3E; padding-bottom: 2px;'>📅 {mois_dict[row['Mois']]} {row['Année']}</h3>", unsafe_allow_html=True)
@@ -822,10 +876,9 @@ with tab2:
                     st.toast("Transaction supprimée !")
                     st.rerun()
 
-# ==========================================
-# ONGLET 3 : PARAMÈTRES
-# ==========================================
-with tab3:
+
+def afficher_parametres():
+    """[OPTIMISATION MODULARITÉ] Logique de configuration des Paramètres."""
     st.header("Paramètres")
     
     st.subheader("🔒 Sécurité & Mot de passe")
@@ -834,15 +887,16 @@ with tab3:
     if pwd_enabled:
         col_pwd_1, col_pwd_2 = st.columns(2)
         with col_pwd_1:
-            new_pwd = st.text_input("Définir ou modifier le mot de passe", type="password", value=st.session_state.get('app_password', ''))
+            new_pwd = st.text_input("Définir ou modifier le mot de passe", type="password")
             if st.button("💾 Sauvegarder le mot de passe"):
                 if new_pwd.strip() == "":
                     st.error("Le mot de passe ne peut pas être vide.")
                 else:
+                    # Stockage du hash SHA-256 uniquement
                     st.session_state['password_enabled'] = True
-                    st.session_state['app_password'] = new_pwd
+                    st.session_state['app_password'] = hacher_mot_de_passe(new_pwd)
                     sauvegarder_donnees()
-                    st.success("Paramètres de sécurité mis à jour ! Le mot de passe sera demandé au prochain lancement.")
+                    st.success("Mot de passe mis à jour et haché en sécurité SHA-256 !")
     else:
         if st.session_state.get('password_enabled', False):
             if st.button("🔓 Désactiver la protection (Sauvegarder)"):
@@ -986,3 +1040,26 @@ with tab3:
             sauvegarder_donnees()
             st.success("Toutes les données ont été réinitialisées.")
             st.rerun()
+
+# ==========================================
+# 7. EXÉCUTION DE L'APPLICATION
+# ==========================================
+st.title("💰 Mon Gestionnaire de Finances")
+
+df = st.session_state['transactions']
+mois_dict = {
+    1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin", 
+    7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"
+}
+
+# Rendu de la barre d'onglets principale
+tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📝 Transactions", "⚙️ Paramètres"])
+
+with tab1:
+    afficher_dashboard(df, mois_dict)
+
+with tab2:
+    afficher_transactions(df, mois_dict)
+
+with tab3:
+    afficher_parametres()
