@@ -1,0 +1,124 @@
+{
+ "accounts": [
+  {
+   "name": "Compte Courant",
+   "initial_balance": 100.5
+  },
+  {
+   "name": "Livret A",
+   "initial_balance": 1000.0
+  },
+  {
+   "name": "Épargne",
+   "initial_balance": 0.0
+  }
+ ],
+ "categories": [
+  {
+   "name": "Salaire",
+   "color": "#22C55E",
+   "system": false
+  },
+  {
+   "name": "Course",
+   "color": "#14B8A6",
+   "system": false
+  },
+  {
+   "name": "Loisirs",
+   "color": "#123456",
+   "system": false
+  },
+  {
+   "name": "Virement interne",
+   "color": "#6B7280",
+   "system": true
+  }
+ ],
+ "category_colors": {
+  "Salaire": "#22C55E",
+  "Course": "#14B8A6",
+  "Loisirs": "#123456",
+  "Virement interne": "#6B7280"
+ },
+ "balances": {
+  "Compte Courant": 1740.6,
+  "Livret A": 1299.7,
+  "Épargne": 0.0
+ },
+ "total": 3040.3,
+ "years": [
+  2020,
+  2021,
+  2022,
+  2023,
+  2024,
+  2025,
+  2026,
+  2027,
+  2028,
+  2029,
+  2030
+ ],
+ "transactions": [
+  {
+   "id": 5,
+   "date": "2026-02-03",
+   "type": "Sortie",
+   "account": "Livret A",
+   "target_account": null,
+   "category": "Loisirs",
+   "name": "",
+   "amount": 0.2
+  },
+  {
+   "id": 4,
+   "date": "2026-02-02",
+   "type": "Sortie",
+   "account": "Livret A",
+   "target_account": null,
+   "category": "Loisirs",
+   "name": "",
+   "amount": 0.1
+  },
+  {
+   "id": 3,
+   "date": "2026-01-10",
+   "type": "Transfert",
+   "account": "Compte Courant",
+   "target_account": "Livret A",
+   "category": "Virement interne",
+   "name": "Épargne",
+   "amount": 300.0
+  },
+  {
+   "id": 2,
+   "date": "2026-01-05",
+   "type": "Sortie",
+   "account": "Compte Courant",
+   "target_account": null,
+   "category": "Course",
+   "name": "Supermarché",
+   "amount": 59.9
+  },
+  {
+   "id": 1,
+   "date": "2025-12-30",
+   "type": "Entrée",
+   "account": "Compte Courant",
+   "target_account": null,
+   "category": "Salaire",
+   "name": "Paie déc.",
+   "amount": 2000.0
+  }
+ ],
+ "password_enabled": true,
+ "user": {
+  "id": 1,
+  "username": "Admin",
+  "is_admin": true,
+  "has_password": true
+ },
+ "users_count": 1,
+ "db_encrypted": true
+}

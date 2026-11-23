@@ -1,0 +1,89 @@
+{
+ "year": 2026,
+ "month": 1,
+ "has_data": true,
+ "month_flow": {
+  "entrees": 0.0,
+  "sorties": 59.9,
+  "net": -59.9
+ },
+ "year_flow": {
+  "entrees": 0.0,
+  "sorties": 60.2,
+  "net": -60.2
+ },
+ "month_expenses": [
+  {
+   "category": "Course",
+   "amount": 59.9
+  }
+ ],
+ "month_income": [],
+ "year_expenses": [
+  {
+   "category": "Course",
+   "amount": 59.9
+  },
+  {
+   "category": "Loisirs",
+   "amount": 0.3
+  }
+ ],
+ "year_income": [],
+ "evolution": {
+  "dates": [
+   "2026-01-05",
+   "2026-01-10",
+   "2026-02-02",
+   "2026-02-03"
+  ],
+  "series": [
+   {
+    "account": "Compte Courant",
+    "values": [
+     2040.6,
+     1740.6,
+     1740.6,
+     1740.6
+    ]
+   },
+   {
+    "account": "Livret A",
+    "values": [
+     1000.0,
+     1300.0,
+     1299.9,
+     1299.7
+    ]
+   },
+   {
+    "account": "Épargne",
+    "values": [
+     0.0,
+     0.0,
+     0.0,
+     0.0
+    ]
+   }
+  ]
+ },
+ "avg_expenses": {
+  "months": 2,
+  "items": [
+   {
+    "category": "Course",
+    "total": 59.9,
+    "average": 29.95
+   },
+   {
+    "category": "Loisirs",
+    "total": 0.3,
+    "average": 0.15
+   }
+  ]
+ },
+ "avg_income": {
+  "months": 0,
+  "items": []
+ }
+}

@@ -1,0 +1,39 @@
+services:
+  banque:
+    build: .
+    image: banque:latest
+    container_name: banque
+    restart: unless-stopped
+
+    # Exécute le conteneur avec VOTRE utilisateur pour pouvoir écrire dans ./data (volume monté).
+    # Si besoin : PUID=$(id -u) PGID=$(id -g) docker compose up -d --build
+    user: "${PUID:-1000}:${PGID:-1000}"
+
+    ports:
+      - "8000:8000"          # derrière un reverse proxy : remplacer par `expose: ["8000"]`
+
+    environment:
+      TZ: Europe/Paris
+      # Passer à "true" dès que l'application est servie en HTTPS (cookie de session « Secure »).
+      COOKIE_SECURE: "false"
+      SESSION_TTL_DAYS: "30"
+      # IP autorisées à fournir X-Forwarded-For (vraie IP client pour l'anti brute-force).
+      # Restreindre à l'IP de votre reverse proxy si le port 8000 est exposé directement.
+      FORWARDED_ALLOW_IPS: "*"
+      # Chiffrement de la base au repos : la clé est lue dans ce fichier (monté par « secrets » ci-dessous),
+      # jamais dans une variable d'environnement visible avec `docker inspect`.
+      DB_KEY_FILE: /run/secrets/banque_db_key
+
+    volumes:
+      # Contient banque.db (chiffrée). Pour migrer : y déposer l'ancien banque_data.json (ou monter l'ancien dossier data/).
+      - ./data:/data
+
+    secrets:
+      - banque_db_key
+
+secrets:
+  banque_db_key:
+    # Créer la clé UNE fois :  python scripts/generate_key.py     (ou : mkdir -p secrets && (umask 077; openssl rand -hex 32 > secrets/db_key))
+    # Ce fichier doit rester HORS du dossier partagé du NAS (SMB/NFS) et HORS des sauvegardes de ./data, et être sauvegardé ailleurs.
+    # Pour ne PAS chiffrer : supprimer ce bloc « secrets », la section « secrets » du service et la ligne DB_KEY_FILE.
+    file: ./secrets/db_key

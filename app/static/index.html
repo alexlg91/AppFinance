@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestion Bancaire</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E💰%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <!-- Appliqué avant le rendu pour éviter l'éclair de thème (script externe : CSP "script-src 'self'") -->
+  <script src="/static/js/theme.js"></script>
+</head>
+<body>
+
+  <!-- Écran de verrouillage (affiché seulement si un mot de passe est défini) -->
+  <section id="login" class="login" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <h1>🔒 Accès protégé</h1>
+      <p class="muted">Connectez-vous pour accéder à vos comptes.</p>
+      <label>Identifiant
+        <input type="text" name="username" autocomplete="username" required autocapitalize="none" spellcheck="false">
+      </label>
+      <label>Mot de passe
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <p id="login-error" class="form-error" role="alert" hidden></p>
+      <button class="btn primary" type="submit">Déverrouiller l'accès</button>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <header class="topbar">
+      <h1>💰 Mon Gestionnaire de Finances</h1>
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button role="tab" data-tab="dashboard">📊 Dashboard</button>
+        <button role="tab" data-tab="transactions">📝 Transactions</button>
+        <button role="tab" data-tab="settings">⚙️ Paramètres</button>
+      </nav>
+      <div class="topbar-actions">
+        <span id="whoami" class="who" hidden></span>
+        <button id="btn-theme" class="btn ghost" title="Changer de thème" aria-label="Changer de thème">🌓</button>
+        <button id="btn-lock" class="btn ghost" title="Se déconnecter / changer d'utilisateur" aria-label="Se déconnecter" hidden>🔒</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="view-dashboard" class="view" role="tabpanel"></section>
+      <section id="view-transactions" class="view" role="tabpanel" hidden></section>
+      <section id="view-settings" class="view" role="tabpanel" hidden></section>
+    </main>
+  </div>
+
+  <!-- Simulateur de solde : <dialog> natif (focus piégé, Échap pour fermer) -->
+  <dialog id="dlg-simu" class="simu"></dialog>
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <noscript><p style="padding:2rem">Cette application nécessite JavaScript.</p></noscript>
+
+  <!-- Chart.js est embarqué localement (téléchargé au build Docker, voir scripts/fetch_vendor.py) -->
+  <script src="/static/vendor/chart.umd.js"></script>
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>
